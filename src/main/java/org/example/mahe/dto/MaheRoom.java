@@ -68,7 +68,16 @@ public class MaheRoom extends BaseGameRoom {
 
     private void updateActualTurnPlayer() {
         String basePlayer = turnOrder.get(currentTurnIdx);
-        int pos = turtlePositions.get(basePlayer);
+        Integer pos = turtlePositions.get(basePlayer);
+        if (pos == null) {
+            actualTurnPlayer = basePlayer;
+            return;
+        }
+
+        if (pos == RAFT_POSITION) {
+            actualTurnPlayer = basePlayer;
+            return;
+        }
         List<String> stack = positionStacks.getOrDefault(pos, new ArrayList<>());
         if (stack.isEmpty() || !stack.contains(basePlayer)) {
             actualTurnPlayer = basePlayer;
@@ -119,7 +128,16 @@ public class MaheRoom extends BaseGameRoom {
             return nextTurn(content);
         }
 
-        String content = "🎲 " + playerName + ": " + dice + " (합: " + newSum + ", " + diceCount + "개) → " + previewMove + "칸";
+        String basePlayerId = turnOrder.get(currentTurnIdx);
+        String basePlayerName = getNickname(basePlayerId);
+        String controllerName = getNickname(playerId);
+
+        String nameDisplay = basePlayerName;
+        if (!basePlayerId.equals(playerId)) {
+            nameDisplay += "(" + controllerName + " 조종)";
+        }
+
+        String content = "🎲 " + nameDisplay + ": " + dice + " (합: " + newSum + ", " + diceCount + "개) → " + previewMove + "칸";
 
         if (diceCount >= 3 || newSum == 7) {
             return handleStop(playerId);
@@ -129,21 +147,31 @@ public class MaheRoom extends BaseGameRoom {
     }
 
     private void handleBurst(String playerId) {
-        int currentPos = turtlePositions.get(playerId);
+        String basePlayer = turnOrder.get(currentTurnIdx);
+        int currentPos = turtlePositions.get(basePlayer);
+
         List<String> stack = positionStacks.getOrDefault(currentPos, new ArrayList<>());
-        int playerIdx = stack.indexOf(playerId);
+        List<String> toMove = new ArrayList<>();
 
-        if (playerIdx >= 0) {
-            List<String> toMove = new ArrayList<>(stack.subList(playerIdx, stack.size()));
-            stack.subList(playerIdx, stack.size()).clear();
-            if (stack.isEmpty()) positionStacks.remove(currentPos);
 
-            List<String> raftStack = positionStacks.computeIfAbsent(RAFT_POSITION, k -> new ArrayList<>());
-            for (String pid : toMove) {
-                turtlePositions.put(pid, RAFT_POSITION);
-                raftStack.add(pid);
+        if (currentPos == RAFT_POSITION) {
+            toMove.add(basePlayer);
+            stack.remove(basePlayer);
+        } else {
+            int playerIdx = stack.indexOf(basePlayer);
+            if (playerIdx >= 0) {
+                toMove = new ArrayList<>(stack.subList(playerIdx, stack.size()));
+                stack.subList(playerIdx, stack.size()).clear();
+                if (stack.isEmpty()) positionStacks.remove(currentPos);
             }
         }
+
+        List<String> raftStack = positionStacks.computeIfAbsent(RAFT_POSITION, k -> new ArrayList<>());
+        for (String pid : toMove) {
+            turtlePositions.put(pid, RAFT_POSITION);
+            raftStack.add(pid);
+        }
+
         resetDice();
     }
 
@@ -152,22 +180,29 @@ public class MaheRoom extends BaseGameRoom {
 
         int sum = currentRolls.stream().mapToInt(Integer::intValue).sum();
         int moveAmount = sum * diceCount;
-        int currentPos = turtlePositions.get(playerId);
+
+        String basePlayer = turnOrder.get(currentTurnIdx);
+        int currentPos = turtlePositions.get(basePlayer);
 
         List<String> stack = positionStacks.getOrDefault(currentPos, new ArrayList<>());
-        int playerIdx = stack.indexOf(playerId);
-
         List<String> toMove = new ArrayList<>();
-        if (playerIdx >= 0) {
-            toMove = new ArrayList<>(stack.subList(playerIdx, stack.size()));
-            stack.subList(playerIdx, stack.size()).clear();
-            if (stack.isEmpty() && currentPos != RAFT_POSITION) positionStacks.remove(currentPos);
+
+        if (currentPos == RAFT_POSITION) {
+            toMove.add(basePlayer);
+            stack.remove(basePlayer);
         } else {
-            toMove.add(playerId);
+            int playerIdx = stack.indexOf(basePlayer);
+            if (playerIdx >= 0) {
+                toMove = new ArrayList<>(stack.subList(playerIdx, stack.size()));
+                stack.subList(playerIdx, stack.size()).clear();
+                if (stack.isEmpty()) positionStacks.remove(currentPos);
+            } else {
+                toMove.add(basePlayer);
+            }
         }
 
         int newPos = (currentPos == RAFT_POSITION) ? moveAmount : currentPos + moveAmount;
-        String content = "🐢 " + getNickname(playerId) + " " + moveAmount + "칸 이동";
+        String content = "🐢 " + getNickname(basePlayer) + " " + moveAmount + "칸 이동";
         if (toMove.size() > 1) content += " (+" + (toMove.size() - 1) + "마리 업힘)";
 
         boolean gotEgg = false;
@@ -179,7 +214,6 @@ public class MaheRoom extends BaseGameRoom {
                 playerEggCards.get(topTurtle).add(currentEggCard);
                 eggMessage = getNickname(topTurtle) + "이(가) " + currentEggCard + "점 획득!";
                 gotEgg = true;
-
                 if (!eggDeck.isEmpty()) {
                     currentEggCard = eggDeck.remove(0);
                 } else {
@@ -211,7 +245,17 @@ public class MaheRoom extends BaseGameRoom {
     private GameMessage nextTurn(String previousContent) {
         currentTurnIdx = (currentTurnIdx + 1) % turnOrder.size();
         updateActualTurnPlayer();
-        return makeMessage("UPDATE", previousContent + "\n다음: " + getNickname(actualTurnPlayer));
+
+        String basePlayer = turnOrder.get(currentTurnIdx);
+        String nextNickname = getNickname(actualTurnPlayer);
+
+        String turnInfo = "\n다음 턴: " + getNickname(basePlayer);
+
+        if (!basePlayer.equals(actualTurnPlayer)) {
+            turnInfo += " (조종: " + nextNickname + " 👑)";
+        }
+
+        return makeMessage("UPDATE", previousContent + turnInfo);
     }
 
     private GameMessage endGame(String previousContent) {
