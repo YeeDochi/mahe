@@ -13,6 +13,10 @@ import java.util.List;
 public class RoomController {
     private final RoomService roomService;
 
+    @RequestMapping(method = RequestMethod.HEAD)
+    public void healthCheck() {
+    }
+
     @GetMapping
     public List<BaseGameRoom> findAllRooms() {
         return roomService.findAll();
