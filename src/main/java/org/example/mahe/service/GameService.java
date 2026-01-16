@@ -16,7 +16,10 @@ public class GameService {
     public void join(String roomId, GameMessage message) {
         BaseGameRoom room = roomService.findRoom(roomId);
         if (room == null) return;
-
+        if (room.isPlaying()) {
+            System.out.println("❌ 입장 거부: 이미 게임 진행 중인 방 (" + roomId + ")");
+            return;
+        }
         room.enterUser(new Player(message.getSender(), message.getSenderId()));
 
         message.setType("JOIN");
