@@ -144,4 +144,8 @@ const Mahe = (function() {
     };
 })();
 
-document.addEventListener('DOMContentLoaded', () => Core.init(Mahe, { gameName: '마헤' }));
+document.addEventListener('DOMContentLoaded', () => Core.init(Mahe, {
+    gameName: '마헤',
+    apiPath: '/mahe',
+    wsPath: '/mahe/ws'
+}));
